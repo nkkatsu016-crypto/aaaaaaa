@@ -1,0 +1,221 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>四則演算トレーニング</title>
+<style>
+*{box-sizing:border-box}body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;max-width:760px;margin:auto;padding:18px;background:#f5f5f7;color:#222}
+.card{background:#fff;border-radius:18px;padding:22px;margin:12px 0;box-shadow:0 2px 10px #0001}
+h1{font-size:25px;margin:4px 0 18px}h2{font-size:20px}.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+button{border:0;border-radius:12px;padding:11px 17px;font-size:16px;background:#222;color:#fff;cursor:pointer}
+button.secondary{background:#eee;color:#222}button.danger{background:#eee;color:#b00000}
+select,input{font-size:17px;padding:10px;border:1px solid #ccc;border-radius:10px}
+#problem{font-size:38px;font-weight:700;text-align:center;margin:32px 0}
+#feedback{text-align:center;font-size:20px;min-height:30px}
+.stat{font-size:16px;line-height:1.8}.small{color:#666;font-size:14px}.hidden{display:none}
+.tabs{display:flex;gap:8px;margin-bottom:10px}.tab{flex:1}.tab.active{background:#222;color:#fff}.tab:not(.active){background:#eee;color:#222}
+table{width:100%;border-collapse:collapse;margin-top:10px}th,td{padding:8px;border-bottom:1px solid #eee;text-align:left}
+.bar{height:10px;background:#eee;border-radius:8px;overflow:hidden}.bar>div{height:100%;background:#333}
+canvas{width:100%;height:180px}
+</style>
+</head>
+<body>
+<h1>四則演算トレーニング</h1>
+
+<div class="tabs">
+<button class="tab active" onclick="showTab('train',this)">トレーニング</button>
+<button class="tab" onclick="showTab('stats',this)">成績</button>
+</div>
+
+<section id="train">
+<div id="setup" class="card">
+  <div class="row">
+    <label>問題数
+      <select id="count"><option>10</option><option selected>20</option><option>30</option><option>50</option></select>
+    </label>
+    <label>レベル
+      <select id="level">
+        <option value="1">Lv1 整数</option>
+        <option value="2">Lv2 分数</option>
+        <option value="3">Lv3 小数</option>
+        <option value="4" selected>Lv4 混合</option>
+      </select>
+    </label>
+  </div>
+  <p class="small">分数は「a/b」で入力。混合モードでは、過去のミスを参考に苦手な種類を少し多めに出題します。</p>
+  <button onclick="start()">開始</button>
+</div>
+
+<div id="quiz" class="card hidden">
+  <div class="row"><span id="progress"></span><span id="timer"></span><span id="streak"></span></div>
+  <div id="problem"></div>
+  <div style="text-align:center">
+    <input id="answer" autocomplete="off" inputmode="decimal" placeholder="答え">
+    <button onclick="submitAnswer()">回答</button>
+  </div>
+  <div id="feedback"></div>
+</div>
+
+<div id="result" class="card hidden">
+  <h2>今回の結果</h2>
+  <div id="resultStats" class="stat"></div>
+  <div class="row" style="margin-top:14px">
+    <button onclick="start()">もう一度</button>
+    <button class="secondary" onclick="showTab('stats',document.querySelectorAll('.tab')[1])">成績を見る</button>
+  </div>
+</div>
+</section>
+
+<section id="stats" class="hidden">
+<div class="card">
+<h2>累計成績</h2><div id="overall" class="stat"></div>
+</div>
+<div class="card">
+<h2>タイプ別</h2><div id="types"></div>
+</div>
+<div class="card">
+<h2>最近の記録</h2>
+<canvas id="chart" width="700" height="180"></canvas>
+<div id="history"></div>
+</div>
+<div class="card">
+<h2>苦手対策</h2>
+<div id="weak" class="stat"></div>
+<p class="small">混合モードでは、正答率の低いタイプが次回出やすくなります。記録はこのブラウザに保存されます。</p>
+<button class="danger" onclick="resetData()">成績をすべてリセット</button>
+</div>
+</section>
+
+<script>
+const KEY="fourOpsTrainingV2";
+let data=loadData(),total,current=0,correct=0,startTime,timerID,currentQ,streak=0,sessionStreak=0,mistakes=[];
+
+function loadData(){
+ try{return JSON.parse(localStorage.getItem(KEY))||{sessions:[],types:{}}}
+ catch(e){return {sessions:[],types:{}}}
+}
+function save(){localStorage.setItem(KEY,JSON.stringify(data))}
+function gcd(a,b){a=Math.abs(a);b=Math.abs(b);while(b){[a,b]=[b,a%b]}return a}
+function frac(n,d){if(d<0){n=-n;d=-d}let g=gcd(n,d);return [n/g,d/g]}
+function fmt(n,d){[n,d]=frac(n,d);return d===1?String(n):`${n}/${d}`}
+function rand(a,b){return Math.floor(Math.random()*(b-a+1))+a}
+function choice(a){return a[rand(0,a.length-1)]}
+
+function integerQ(){
+ let a=rand(-50,50),b=rand(-50,50),op=choice(["+","−","×","÷"]);
+ if(op==="÷"){b=rand(-12,12)||1;a=b*rand(-12,12)}
+ let ans=op==="+"?a+b:op==="−"?a-b:op==="×"?a*b:a/b;
+ return {text:`${a} ${op} ${b}`,ans:String(ans),kind:"整数",op};
+}
+function fractionQ(){
+ let an=rand(-12,12),ad=rand(1,12),bn=rand(-12,12),bd=rand(1,12),op=choice(["+","−","×","÷"]);
+ if(op==="÷"&&bn===0)bn=1;
+ let n,d;
+ if(op==="+"){n=an*bd+bn*ad;d=ad*bd}
+ if(op==="−"){n=an*bd-bn*ad;d=ad*bd}
+ if(op==="×"){n=an*bn;d=ad*bd}
+ if(op==="÷"){n=an*bd;d=ad*bn}
+ [n,d]=frac(n,d);
+ return {text:`${fmt(an,ad)} ${op} ${fmt(bn,bd)}`,ans:`${n}/${d}`,kind:"分数",op};
+}
+function decimalQ(){
+ let a=rand(-99,99)/10,b=rand(-99,99)/10,op=choice(["+","−","×","÷"]);
+ if(op==="÷"){b=rand(-20,20)/10||1;let k=rand(-20,20)/10;a=b*k}
+ let ans=op==="+"?a+b:op==="−"?a-b:op==="×"?a*b:a/b;
+ ans=Math.round(ans*1000000)/1000000;
+ return {text:`${a} ${op} ${b}`,ans:String(ans),kind:"小数",op};
+}
+function weightedKind(){
+ let kinds=["整数","分数","小数"],weights=kinds.map(k=>{
+   let t=data.types[k]; return t&&t.attempts>=5 ? Math.max(0.5,1-t.correct/t.attempts+0.15) : 1;
+ });
+ let sum=weights.reduce((a,b)=>a+b,0),r=Math.random()*sum;
+ for(let i=0;i<kinds.length;i++){r-=weights[i];if(r<=0)return kinds[i]}
+ return "整数";
+}
+function mixedQ(){
+ let k=weightedKind();
+ return k==="整数"?integerQ():k==="分数"?fractionQ():decimalQ();
+}
+function makeQ(){
+ let l=+$("level").value;
+ return l===1?integerQ():l===2?fractionQ():l===3?decimalQ():mixedQ();
+}
+function normalize(s){
+ s=s.trim().replace("−","-").replace(/\s/g,"");
+ if(s.includes("/")){
+   let p=s.split("/");if(p.length!==2)return null;
+   let n=Number(p[0]),d=Number(p[1]);if(!Number.isFinite(n)||!Number.isFinite(d)||d===0)return null;
+   [n,d]=frac(n,d);return `${n}/${d}`;
+ }
+ let n=Number(s);if(!Number.isFinite(n))return null;
+ return String(Math.round(n*1000000)/1000000);
+}
+function start(){
+ total=+$("count").value;current=0;correct=0;streak=0;sessionStreak=0;mistakes=[];
+ $("setup").classList.add("hidden");$("result").classList.add("hidden");$("quiz").classList.remove("hidden");
+ startTime=Date.now();timerID=setInterval(updateTimer,100);nextQ();
+}
+function updateTimer(){$("timer").textContent=`⏱ ${((Date.now()-startTime)/1000).toFixed(1)}秒`}
+function nextQ(){
+ if(current>=total){finish();return}
+ currentQ=makeQ();current++;
+ $("progress").textContent=`${current} / ${total}`;$("problem").textContent=currentQ.text;
+ $("answer").value="";$("feedback").textContent="";$("answer").focus();
+ $("streak").textContent=`🔥 ${sessionStreak}`;
+}
+function submitAnswer(){
+ if(!$("quiz").classList.contains("hidden")&&currentQ){
+   let given=normalize($("answer").value),expected=normalize(currentQ.ans);
+   let t=data.types[currentQ.kind]||{attempts:0,correct:0};
+   t.attempts++; if(given===expected){correct++;sessionStreak++;streak++;t.correct++;if(streak>data.bestStreak||!data.bestStreak)data.bestStreak=streak;$("feedback").textContent="○ 正解"}
+   else{streak=0;sessionStreak=0;mistakes.push({problem:currentQ.text,answer:$("answer").value||"未入力",correct:currentQ.ans,kind:currentQ.kind,op:currentQ.op});$("feedback").textContent=`× 正解は ${currentQ.ans}`}
+   data.types[currentQ.kind]=t;save();setTimeout(nextQ,450);
+ }
+}
+$("answer").addEventListener("keydown",e=>{if(e.key==="Enter")submitAnswer()});
+
+function finish(){
+ clearInterval(timerID);
+ let sec=(Date.now()-startTime)/1000,rate=correct/total*100;
+ data.sessions.push({date:new Date().toISOString(),total,correct,sec,rate});
+ if(data.sessions.length>100)data.sessions=data.sessions.slice(-100);save();
+ $("quiz").classList.add("hidden");$("result").classList.remove("hidden");
+ $("resultStats").innerHTML=`正答率：<b>${correct}/${total}（${rate.toFixed(0)}%）</b><br>時間：<b>${sec.toFixed(1)}秒</b><br>平均：<b>${(sec/total).toFixed(2)}秒/問</b><br>今回の最高連続正解：<b>${sessionBest()}</b>${mistakes.length?`<hr><b>ミス ${mistakes.length}問</b><ul>${mistakes.map(m=>`<li>${m.problem} → ${m.answer} / 正解 ${m.correct}</li>`).join("")}</ul>`:"<hr><b>全問正解</b>"}`;
+}
+function sessionBest(){
+ let best=0,n=0;for(let i=0;i<total;i++){let m=mistakes.find(x=>false);n++;best=Math.max(best,n)} 
+ if(!mistakes.length)return total;
+ let indices=new Set(mistakes.map(m=>mistakes.indexOf(m)));return Math.max(0,total-mistakes.length);
+}
+function showTab(name,btn){
+ document.querySelectorAll("section").forEach(x=>x.classList.add("hidden"));$(name).classList.remove("hidden");
+ document.querySelectorAll(".tab").forEach(x=>x.classList.remove("active"));if(btn)btn.classList.add("active");
+ if(name==="stats")renderStats();
+}
+function renderStats(){
+ let ss=data.sessions,attempts=ss.reduce((a,s)=>a+s.total,0),corr=ss.reduce((a,s)=>a+s.correct,0);
+ $("overall").innerHTML=`実施回数：<b>${ss.length}</b>回<br>累計問題数：<b>${attempts}</b>問<br>累計正答率：<b>${attempts?(corr/attempts*100).toFixed(1):0}%</b><br>最高連続正解：<b>${data.bestStreak||0}</b>`;
+ let html="<table><tr><th>種類</th><th>正答率</th><th>問題数</th></tr>";
+ ["整数","分数","小数"].forEach(k=>{let t=data.types[k]||{attempts:0,correct:0},r=t.attempts?t.correct/t.attempts*100:0;html+=`<tr><td>${k}</td><td>${r.toFixed(1)}%</td><td>${t.attempts}</td></tr><tr><td colspan="3"><div class="bar"><div style="width:${r}%"></div></div></td></tr>`});$("types").innerHTML=html+"</table>";
+ $("history").innerHTML=ss.slice(-10).reverse().map(s=>`<div>${new Date(s.date).toLocaleString("ja-JP")}：${s.correct}/${s.total}（${s.rate.toFixed(0)}%）・${s.sec.toFixed(1)}秒</div>`).join("")||"まだ記録がありません。";
+ let rates=["整数","分数","小数"].map(k=>{let t=data.types[k]||{attempts:0,correct:0};return [k,t.attempts,t.attempts?t.correct/t.attempts*100:0]}).sort((a,b)=>a[2]-b[2]);
+ $("weak").innerHTML=rates[0][1]>=3?`現在の苦手タイプ：<b>${rates[0][0]}</b>（正答率 ${rates[0][2].toFixed(1)}%）<br>混合モードではこのタイプが出やすくなっています。`:"まだ十分なデータがありません。各タイプを3問以上解くと判定します。";
+ drawChart();
+}
+function drawChart(){
+ let c=$("chart"),ctx=c.getContext("2d"),ss=data.sessions.slice(-15);ctx.clearRect(0,0,c.width,c.height);
+ if(!ss.length){ctx.font="16px sans-serif";ctx.fillText("記録がたまるとここに正答率の推移が表示されます。",20,80);return}
+ let w=c.width,h=c.height,p=35;ctx.strokeStyle="#ccc";ctx.beginPath();ctx.moveTo(p,10);ctx.lineTo(p,h-p);ctx.lineTo(w-10,h-p);ctx.stroke();
+ ctx.font="12px sans-serif";ctx.fillText("100%",5,20);ctx.fillText("0%",15,h-p+4);
+ ctx.strokeStyle="#222";ctx.beginPath();
+ ss.forEach((s,i)=>{let x=p+(w-p-15)*(i/Math.max(1,ss.length-1)),y=(h-p)-(h-p-20)*s.rate/100;if(i===0)ctx.moveTo(x,y);else ctx.lineTo(x,y)});
+ ctx.stroke();
+}
+function resetData(){
+ if(confirm("保存した成績をすべて削除しますか？")){localStorage.removeItem(KEY);data=loadData();renderStats()}
+}
+</script>
+</body>
+</html>
