@@ -1,0 +1,807 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>四則演算トレーニング</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:#f4f4f6;color:#222;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+main{max-width:720px;margin:auto;padding:16px}
+h1{font-size:25px;margin:5px 0 16px}
+.card{background:#fff;border-radius:18px;padding:20px;margin-bottom:14px;box-shadow:0 2px 8px rgba(0,0,0,.08)}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+label{font-size:16px}
+select,input{font-size:18px;padding:10px;border:1px solid #ccc;border-radius:10px;background:#fff}
+button{border:0;border-radius:11px;padding:11px 17px;background:#222;color:#fff;font-size:16px}
+button.gray{background:#e9e9ed;color:#222}
+button.red{background:#eee;color:#b00000}
+.hidden{display:none!important}
+.small{font-size:14px;color:#666;line-height:1.6}
+.topbar{display:flex;justify-content:space-between;color:#666;font-size:15px}
+#problem{text-align:center;font-size:38px;font-weight:700;margin:38px 0}
+.answerRow{display:flex;justify-content:center;gap:8px}
+#answer{width:220px;text-align:center}
+#feedback{text-align:center;min-height:30px;margin-top:16px;font-size:19px}
+
+.answerKeypad{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;max-width:520px;margin:12px auto 0}
+.answerKeypad button{height:52px;padding:0;font-size:22px;border-radius:12px}
+.answerKeypad button.key-gray{background:#e9e9ed;color:#222}
+
+nav{display:flex;gap:8px;margin-bottom:14px}
+nav button{flex:1}
+nav button.active{background:#222;color:#fff}
+nav button:not(.active){background:#e9e9ed;color:#222}
+table{width:100%;border-collapse:collapse}
+td,th{padding:8px;border-bottom:1px solid #eee;text-align:left}
+.bar{height:9px;background:#eee;border-radius:8px;overflow:hidden}
+.bar span{display:block;height:100%;background:#333}
+canvas{width:100%;height:180px}
+</style>
+</head>
+
+<body>
+<main>
+<h1>四則演算トレーニング</h1>
+
+<nav>
+<button id="trainTab" class="active">トレーニング</button>
+<button id="statsTab">成績</button>
+</nav>
+
+<section id="training">
+
+<div id="startScreen" class="card">
+<div class="row">
+<label>問題数
+<select id="questionCount">
+<option value="10">10</option>
+<option value="20" selected>20</option>
+<option value="30">30</option>
+<option value="50">50</option>
+</select>
+</label>
+
+<label>レベル
+<select id="difficulty">
+<option value="1">Lv1 整数</option>
+<option value="2">Lv2 分数</option>
+<option value="3">Lv3 小数</option>
+<option value="4" selected>Lv4 混合</option>
+</select>
+</label>
+</div>
+
+<p class="small">
+混合では整数・分数・小数をランダムに出題します。<br>
+分数の答えは「3/4」のように入力してください。
+</p>
+
+<button id="startButton">開始</button>
+</div>
+
+<div id="quizScreen" class="card hidden">
+<div class="topbar">
+<span id="progress">1 / 20</span>
+<span id="time">0.0秒</span>
+<span id="streak">連続 0</span>
+</div>
+
+<div id="problem">問題</div>
+
+<div class="answerRow">
+<input id="answer" type="text" inputmode="none" autocomplete="off" placeholder="答え">
+<button id="answerButton">回答</button>
+</div>
+
+<div class="answerKeypad" id="answerKeypad">
+<button type="button" data-key="1">1</button>
+<button type="button" data-key="2">2</button>
+<button type="button" data-key="3">3</button>
+<button type="button" data-key="4">4</button>
+<button type="button" data-key="5">5</button>
+<button type="button" data-key="6">6</button>
+<button type="button" data-key="7">7</button>
+<button type="button" data-key="8">8</button>
+<button type="button" data-key="9">9</button>
+<button type="button" data-key="−" class="key-gray">−</button>
+<button type="button" data-key="0">0</button>
+<button type="button" data-key="." class="key-gray">.</button>
+<button type="button" data-key="/" class="key-gray">/</button>
+<button type="button" data-key="backspace" class="key-gray">⌫</button>
+<button type="button" data-key="clear" class="key-gray">C</button>
+<button type="button" id="keypadAnswer">回答</button>
+</div>
+
+<div id="feedback"></div>
+</div>
+
+<div id="resultScreen" class="card hidden">
+<h2>今回の結果</h2>
+<div id="resultText"></div>
+<br>
+<button id="againButton">もう一度</button>
+</div>
+
+</section>
+
+<section id="statsSection" class="hidden">
+
+<div class="card">
+<h2>累計</h2>
+<div id="overall"></div>
+</div>
+
+<div class="card">
+<h2>タイプ別</h2>
+<div id="typeStats"></div>
+</div>
+
+<div class="card">
+<h2>最近の成績</h2>
+<canvas id="chart" width="680" height="180"></canvas>
+<div id="history"></div>
+</div>
+
+<div class="card">
+<h2>苦手タイプ</h2>
+<div id="weakType"></div>
+<p class="small">記録が少ない場合は「まだ判定できません」と表示されます。</p>
+<button id="resetButton" class="red">成績をリセット</button>
+</div>
+
+</section>
+</main>
+
+<script>
+"use strict";
+
+/* =========================
+   保存データ
+========================= */
+
+const STORAGE_KEY = "four_operations_training_v3";
+
+function emptyData(){
+    return {
+        sessions: [],
+        types: {
+            "整数": {attempts:0, correct:0},
+            "分数": {attempts:0, correct:0},
+            "小数": {attempts:0, correct:0}
+        },
+        bestStreak: 0
+    };
+}
+
+function loadData(){
+    try{
+        const saved = localStorage.getItem(STORAGE_KEY);
+        if(!saved) return emptyData();
+
+        const d = JSON.parse(saved);
+        const base = emptyData();
+
+        if(Array.isArray(d.sessions)) base.sessions = d.sessions;
+        if(d.types){
+            for(const type of ["整数","分数","小数"]){
+                if(d.types[type]){
+                    base.types[type].attempts = Number(d.types[type].attempts) || 0;
+                    base.types[type].correct = Number(d.types[type].correct) || 0;
+                }
+            }
+        }
+        base.bestStreak = Number(d.bestStreak) || 0;
+        return base;
+    }catch(e){
+        return emptyData();
+    }
+}
+
+let data = loadData();
+
+function saveData(){
+    try{
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+    }catch(e){
+        console.log("保存できませんでした", e);
+    }
+}
+
+/* =========================
+   数学
+========================= */
+
+function gcd(a,b){
+    a = Math.abs(a);
+    b = Math.abs(b);
+
+    while(b !== 0){
+        const r = a % b;
+        a = b;
+        b = r;
+    }
+
+    return a || 1;
+}
+
+function reduceFraction(n,d){
+    if(d < 0){
+        n = -n;
+        d = -d;
+    }
+
+    const g = gcd(n,d);
+    return [n/g,d/g];
+}
+
+function fractionString(n,d){
+    [n,d] = reduceFraction(n,d);
+
+    if(d === 1) return String(n);
+    return n + "/" + d;
+}
+
+function randomInt(min,max){
+    return Math.floor(Math.random()*(max-min+1))+min;
+}
+
+function randomChoice(array){
+    return array[randomInt(0,array.length-1)];
+}
+
+/* =========================
+   問題生成
+========================= */
+
+function makeIntegerProblem(){
+    let a = randomInt(-50,50);
+    let b = randomInt(-50,50);
+    const op = randomChoice(["+","−","×","÷"]);
+
+    if(op === "÷"){
+        b = randomInt(-12,12);
+        if(b === 0) b = 1;
+        a = b * randomInt(-12,12);
+    }
+
+    let answer;
+
+    if(op === "+") answer = a+b;
+    if(op === "−") answer = a-b;
+    if(op === "×") answer = a*b;
+    if(op === "÷") answer = a/b;
+
+    return {
+        text: `${a} ${op} ${b}`,
+        answer: String(answer),
+        type: "整数",
+        operator: op
+    };
+}
+
+function makeFractionProblem(){
+    let aN = randomInt(-12,12);
+    const aD = randomInt(1,12);
+    let bN = randomInt(-12,12);
+    const bD = randomInt(1,12);
+    const op = randomChoice(["+","−","×","÷"]);
+
+    if(op === "÷" && bN === 0) bN = 1;
+
+    let n,d;
+
+    if(op === "+"){
+        n = aN*bD + bN*aD;
+        d = aD*bD;
+    }
+
+    if(op === "−"){
+        n = aN*bD - bN*aD;
+        d = aD*bD;
+    }
+
+    if(op === "×"){
+        n = aN*bN;
+        d = aD*bD;
+    }
+
+    if(op === "÷"){
+        n = aN*bD;
+        d = aD*bN;
+    }
+
+    [n,d] = reduceFraction(n,d);
+
+    return {
+        text: `${fractionString(aN,aD)} ${op} ${fractionString(bN,bD)}`,
+        answer: `${n}/${d}`,
+        type: "分数",
+        operator: op
+    };
+}
+
+function makeDecimalProblem(){
+    let a = randomInt(-99,99)/10;
+    let b = randomInt(-99,99)/10;
+    const op = randomChoice(["+","−","×","÷"]);
+
+    if(op === "÷"){
+        b = randomInt(-20,20)/10;
+        if(b === 0) b = 1;
+
+        const multiplier = randomInt(-20,20)/10;
+        a = b * multiplier;
+    }
+
+    let answer;
+
+    if(op === "+") answer = a+b;
+    if(op === "−") answer = a-b;
+    if(op === "×") answer = a*b;
+    if(op === "÷") answer = a/b;
+
+    answer = Math.round(answer*1000000)/1000000;
+
+    return {
+        text: `${a} ${op} ${b}`,
+        answer: String(answer),
+        type: "小数",
+        operator: op
+    };
+}
+
+function getWeightedType(){
+    const types = ["整数","分数","小数"];
+
+    const weights = types.map(type=>{
+        const t = data.types[type];
+
+        if(t.attempts < 5) return 1;
+
+        const accuracy = t.correct/t.attempts;
+
+        return Math.max(0.3, 1.2 - accuracy);
+    });
+
+    const total = weights[0]+weights[1]+weights[2];
+    let r = Math.random()*total;
+
+    for(let i=0;i<types.length;i++){
+        r -= weights[i];
+        if(r <= 0) return types[i];
+    }
+
+    return types[0];
+}
+
+function makeProblem(){
+    const level = Number(document.getElementById("difficulty").value);
+
+    if(level === 1) return makeIntegerProblem();
+    if(level === 2) return makeFractionProblem();
+    if(level === 3) return makeDecimalProblem();
+
+    const type = getWeightedType();
+
+    if(type === "整数") return makeIntegerProblem();
+    if(type === "分数") return makeFractionProblem();
+    return makeDecimalProblem();
+}
+
+/* =========================
+   答え判定
+========================= */
+
+function normalizeAnswer(value){
+    let s = value.trim();
+
+    s = s.replace(/−/g,"-");
+    s = s.replace(/\s/g,"");
+
+    if(s.includes("/")){
+        const parts = s.split("/");
+
+        if(parts.length !== 2) return null;
+
+        const n = Number(parts[0]);
+        const d = Number(parts[1]);
+
+        if(!Number.isFinite(n) || !Number.isFinite(d) || d === 0){
+            return null;
+        }
+
+        const reduced = reduceFraction(n,d);
+        return reduced[0] + "/" + reduced[1];
+    }
+
+    const n = Number(s);
+
+    if(!Number.isFinite(n)) return null;
+
+    return String(Math.round(n*1000000)/1000000);
+}
+
+function answersEqual(user,correct){
+    return normalizeAnswer(user) === normalizeAnswer(correct);
+}
+
+/* =========================
+   トレーニング
+========================= */
+
+let totalQuestions = 0;
+let currentQuestion = 0;
+let correctAnswers = 0;
+let currentProblem = null;
+let currentStreak = 0;
+let bestSessionStreak = 0;
+let startTime = 0;
+let timer = null;
+let mistakes = [];
+
+function startTraining(){
+    totalQuestions = Number(document.getElementById("questionCount").value);
+
+    currentQuestion = 0;
+    correctAnswers = 0;
+    currentStreak = 0;
+    bestSessionStreak = 0;
+    mistakes = [];
+
+    document.getElementById("startScreen").classList.add("hidden");
+    document.getElementById("resultScreen").classList.add("hidden");
+    document.getElementById("quizScreen").classList.remove("hidden");
+
+    startTime = Date.now();
+
+    clearInterval(timer);
+
+    timer = setInterval(updateTimer,100);
+
+    nextQuestion();
+}
+
+function updateTimer(){
+    const seconds = (Date.now()-startTime)/1000;
+    document.getElementById("time").textContent = seconds.toFixed(1)+"秒";
+}
+
+function nextQuestion(){
+    if(currentQuestion >= totalQuestions){
+        finishTraining();
+        return;
+    }
+
+    currentProblem = makeProblem();
+    currentQuestion++;
+
+    document.getElementById("progress").textContent =
+        currentQuestion+" / "+totalQuestions;
+
+    document.getElementById("problem").textContent =
+        currentProblem.text;
+
+    document.getElementById("answer").value = "";
+    document.getElementById("feedback").textContent = "";
+
+    document.getElementById("streak").textContent =
+        "連続 "+currentStreak;
+
+    document.getElementById("answer").focus();
+}
+
+function submitAnswer(){
+    if(!currentProblem) return;
+
+    const input = document.getElementById("answer");
+    const userAnswer = input.value;
+
+    if(userAnswer.trim() === "") return;
+
+    const correct = answersEqual(userAnswer,currentProblem.answer);
+
+    const stats = data.types[currentProblem.type];
+
+    stats.attempts++;
+
+    if(correct){
+        correctAnswers++;
+        currentStreak++;
+
+        if(currentStreak > bestSessionStreak){
+            bestSessionStreak = currentStreak;
+        }
+
+        if(currentStreak > data.bestStreak){
+            data.bestStreak = currentStreak;
+        }
+
+        stats.correct++;
+
+        document.getElementById("feedback").textContent = "○ 正解";
+    }else{
+        mistakes.push({
+            problem: currentProblem.text,
+            user: userAnswer,
+            answer: currentProblem.answer
+        });
+
+        currentStreak = 0;
+
+        document.getElementById("feedback").textContent =
+            "× 正解は "+currentProblem.answer;
+    }
+
+    saveData();
+
+    setTimeout(nextQuestion,500);
+}
+
+function finishTraining(){
+    clearInterval(timer);
+
+    const seconds = (Date.now()-startTime)/1000;
+    const accuracy = correctAnswers/totalQuestions*100;
+
+    data.sessions.push({
+        date: new Date().toISOString(),
+        total: totalQuestions,
+        correct: correctAnswers,
+        seconds: seconds,
+        accuracy: accuracy
+    });
+
+    if(data.sessions.length > 100){
+        data.sessions = data.sessions.slice(-100);
+    }
+
+    saveData();
+
+    document.getElementById("quizScreen").classList.add("hidden");
+    document.getElementById("resultScreen").classList.remove("hidden");
+
+    let html =
+        `正答率：<b>${correctAnswers}/${totalQuestions}（${accuracy.toFixed(0)}%）</b><br>`+
+        `時間：<b>${seconds.toFixed(1)}秒</b><br>`+
+        `平均：<b>${(seconds/totalQuestions).toFixed(2)}秒/問</b><br>`+
+        `今回の最高連続正解：<b>${bestSessionStreak}</b>`;
+
+    if(mistakes.length > 0){
+        html += "<hr><b>ミスした問題</b><ol>";
+
+        mistakes.forEach(m=>{
+            html += `<li>${m.problem}<br>あなた：${escapeHTML(m.user)} / 正解：${m.answer}</li>`;
+        });
+
+        html += "</ol>";
+    }else{
+        html += "<hr><b>全問正解</b>";
+    }
+
+    document.getElementById("resultText").innerHTML = html;
+}
+
+function escapeHTML(value){
+    return String(value)
+        .replace(/&/g,"&amp;")
+        .replace(/</g,"&lt;")
+        .replace(/>/g,"&gt;")
+        .replace(/"/g,"&quot;");
+}
+
+/* =========================
+   成績
+========================= */
+
+function showStats(){
+    document.getElementById("training").classList.add("hidden");
+    document.getElementById("statsSection").classList.remove("hidden");
+
+    document.getElementById("trainTab").classList.remove("active");
+    document.getElementById("statsTab").classList.add("active");
+
+    renderStats();
+}
+
+function showTraining(){
+    document.getElementById("statsSection").classList.add("hidden");
+    document.getElementById("training").classList.remove("hidden");
+
+    document.getElementById("statsTab").classList.remove("active");
+    document.getElementById("trainTab").classList.add("active");
+}
+
+function renderStats(){
+    let total = 0;
+    let correct = 0;
+
+    data.sessions.forEach(s=>{
+        total += s.total;
+        correct += s.correct;
+    });
+
+    const accuracy = total ? correct/total*100 : 0;
+
+    document.getElementById("overall").innerHTML =
+        `実施回数：<b>${data.sessions.length}</b>回<br>`+
+        `累計問題数：<b>${total}</b>問<br>`+
+        `累計正答率：<b>${accuracy.toFixed(1)}%</b><br>`+
+        `最高連続正解：<b>${data.bestStreak}</b>問`;
+
+    let table =
+        "<table><tr><th>タイプ</th><th>正答率</th><th>問題数</th></tr>";
+
+    ["整数","分数","小数"].forEach(type=>{
+        const t = data.types[type];
+        const rate = t.attempts ? t.correct/t.attempts*100 : 0;
+
+        table +=
+            `<tr><td>${type}</td><td>${rate.toFixed(1)}%</td><td>${t.attempts}</td></tr>`+
+            `<tr><td colspan="3"><div class="bar"><span style="width:${rate}%"></span></div></td></tr>`;
+    });
+
+    table += "</table>";
+
+    document.getElementById("typeStats").innerHTML = table;
+
+    const recent = data.sessions.slice(-10).reverse();
+
+    if(recent.length === 0){
+        document.getElementById("history").innerHTML =
+            '<p class="small">まだ記録がありません。</p>';
+    }else{
+        document.getElementById("history").innerHTML =
+            recent.map(s=>{
+                const date = new Date(s.date).toLocaleString("ja-JP");
+                return `<div>${date}：${s.correct}/${s.total}（${s.accuracy.toFixed(0)}%）・${s.seconds.toFixed(1)}秒</div>`;
+            }).join("");
+    }
+
+    const weak = ["整数","分数","小数"]
+        .map(type=>{
+            const t = data.types[type];
+            return {
+                type,
+                attempts:t.attempts,
+                rate:t.attempts ? t.correct/t.attempts*100 : 0
+            };
+        })
+        .filter(x=>x.attempts >= 3)
+        .sort((a,b)=>a.rate-b.rate);
+
+    if(weak.length === 0){
+        document.getElementById("weakType").innerHTML =
+            "まだ十分なデータがありません。各タイプを3問以上解いてください。";
+    }else{
+        document.getElementById("weakType").innerHTML =
+            `現在の苦手タイプ：<b>${weak[0].type}</b><br>`+
+            `正答率：${weak[0].rate.toFixed(1)}%<br><br>`+
+            `混合モードでは、このタイプが少し出やすくなります。`;
+    }
+
+    drawChart();
+}
+
+function drawChart(){
+    const canvas = document.getElementById("chart");
+    const ctx = canvas.getContext("2d");
+
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+
+    const sessions = data.sessions.slice(-15);
+
+    if(sessions.length === 0){
+        ctx.font = "15px sans-serif";
+        ctx.fillText("記録がたまるとここにグラフが表示されます。",20,80);
+        return;
+    }
+
+    const left = 40;
+    const right = canvas.width-15;
+    const top = 15;
+    const bottom = canvas.height-30;
+
+    ctx.strokeStyle = "#ccc";
+    ctx.beginPath();
+    ctx.moveTo(left,top);
+    ctx.lineTo(left,bottom);
+    ctx.lineTo(right,bottom);
+    ctx.stroke();
+
+    ctx.fillStyle = "#666";
+    ctx.font = "12px sans-serif";
+    ctx.fillText("100%",5,20);
+    ctx.fillText("0%",15,bottom+4);
+
+    ctx.strokeStyle = "#222";
+    ctx.beginPath();
+
+    sessions.forEach((s,i)=>{
+        const x = sessions.length===1
+            ? (left+right)/2
+            : left+(right-left)*i/(sessions.length-1);
+
+        const y = bottom-(bottom-top)*(s.accuracy/100);
+
+        if(i===0) ctx.moveTo(x,y);
+        else ctx.lineTo(x,y);
+    });
+
+    ctx.stroke();
+}
+
+
+function insertKey(key){
+    const input = document.getElementById("answer");
+    const value = input.value;
+
+    if(key === "backspace"){
+        input.value = value.slice(0, -1);
+    }else if(key === "clear"){
+        input.value = "";
+    }else if(key === "−"){
+        // マイナスは先頭に1個だけ
+        if(value === ""){
+            input.value = "−";
+        }else if(value === "−"){
+            input.value = "";
+        }
+    }else if(key === "."){
+        // 小数点は1つだけ
+        if(!value.includes(".") && !value.includes("/")){
+            input.value = value + ".";
+        }
+    }else if(key === "/"){
+        // 分数用
+        if(value !== "" && !value.includes("/")){
+            input.value = value + "/";
+        }
+    }else{
+        input.value = value + key;
+    }
+
+    // 入力した文字を常に画面に表示
+    input.dispatchEvent(new Event("input", {bubbles:true}));
+}
+
+document.querySelectorAll("#answerKeypad [data-key]").forEach(button => {
+    button.addEventListener("click", () => insertKey(button.dataset.key));
+});
+
+document.getElementById("keypadAnswer").addEventListener("click", submitAnswer);
+
+/* =========================
+   イベント
+========================= */
+
+document.getElementById("startButton").addEventListener("click",startTraining);
+
+document.getElementById("answerButton").addEventListener("click",submitAnswer);
+
+document.getElementById("answer").addEventListener("keydown",function(e){
+    if(e.key === "Enter"){
+        submitAnswer();
+    }
+});
+
+document.getElementById("againButton").addEventListener("click",function(){
+    startTraining();
+});
+
+document.getElementById("trainTab").addEventListener("click",showTraining);
+
+document.getElementById("statsTab").addEventListener("click",showStats);
+
+document.getElementById("resetButton").addEventListener("click",function(){
+    const ok = confirm("保存した成績をすべて削除しますか？");
+
+    if(!ok) return;
+
+    data = emptyData();
+    saveData();
+    renderStats();
+});
+</script>
+</body>
+</html>
